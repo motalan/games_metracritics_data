@@ -38,8 +38,10 @@ def get_games(year: int):
         for i in links:
             link_games.append(i.get('href'))
         
+        if last_page == 1:
+            break
         params['page'] += 1
     
     return pd.DataFrame({'Game': games, 'Link': link_games})
 
-get_games(2025).to_csv('data/raw/games_2025.csv',index=False)
+get_games(2026).to_csv('data/raw/games_2026.csv',index=False)
