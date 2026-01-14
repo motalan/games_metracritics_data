@@ -15,10 +15,13 @@ def request_page(year):
     return page
 
 
-def get_last_page():
-    page = request_page(2025)
-    last_pages = page.find_all('span', class_='c-navigationPagination_itemButtonContent')
-    last_page_number = last_pages[-2].text.strip()
+def get_last_page(year: int):
+    try:
+        page = request_page(year)
+        last_pages = page.find_all('span', class_='c-navigationPagination_itemButtonContent')
+        last_page_number = last_pages[-2].text.strip()
+    except:
+        last_page_number = 1
     return int(last_page_number)
 
 
