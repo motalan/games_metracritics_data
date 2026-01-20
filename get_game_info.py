@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-link = 'https://www.metacritic.com/game/clair-obscur-expedition-33/'
+link = 'https://www.metacritic.com/game/the-legend-of-zelda-tears-of-the-kingdom-nintendo/'
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
 params = {'page':1}
 
@@ -12,4 +12,7 @@ metascore_review = page.find('div', class_='c-siteReviewScore u-flexbox-column u
 user_review = page.find('div', class_='c-siteReviewScore u-flexbox-column u-flexbox-alignCenter u-flexbox-justifyCenter g-text-bold c-siteReviewScore_green c-siteReviewScore_user g-color-gray90 c-siteReviewScore_medium').text
 platforms = page.find_all('li', class_='c-gameDetails_listItem g-color-gray70 u-inline-block')
 platforms = [games.text.strip() for games in platforms]
-developer = page.find('li', class_='c-gameDetails_listItem u-inline-block g-color-gray70').text
+#developer = page.find('li', class_='c-gameDetails_listItem u-inline-block g-color-gray70').text
+#publisher = page.find('span', class_='g-outer-spacing-left-medium-fluid u-block g-color-gray70').text
+genres = page.find_all('span', class_='c-globalButton_label')[-2].text.strip().split(" ")
+print(genres)
