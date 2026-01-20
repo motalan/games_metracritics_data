@@ -24,7 +24,7 @@ def get_last_page(year: int):
 def get_games(year: int):
     games = []
     link_games = []
-    last_page = get_last_page(2025)
+    last_page = get_last_page(year)
     while params['page'] <= last_page:
         page = request_page(year)
         page.find_all('h3', class_='c-finderProductCard_titleHeading')
