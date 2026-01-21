@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-link = '/game/the-legend-of-zelda-tears-of-the-kingdom-nintendo/'
+link = '/game/death-stranding-2-on-the-beach/'
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
 params = {'page':1}
 
@@ -21,11 +21,11 @@ def game_info(page):
     platforms = page.find_all('li', class_='c-gameDetails_listItem g-color-gray70 u-inline-block')
     platforms = [games.text.strip() for games in platforms]
     try:
-        developer = page.find('li', class_='c-gameDetails_listItem u-inline-block g-color-gray70').text
+        developer = page.find('li', class_='c-gameDetails_listItem u-inline-block g-color-gray70').text.strip()
     except:
-        developer = page.find_all('a', class_='u-text-underline')[-2].text
+        developer = page.find_all('a', class_='u-text-underline')[-2].text.strip()
     try:
-       publisher = page.find('span', class_='g-outer-spacing-left-medium-fluid u-block g-color-gray70').text
+       publisher = page.find('span', class_='g-outer-spacing-left-medium-fluid u-block g-color-gray70').text.strip()
     except:
         publisher = page.find_all('a', class_='u-text-underline')[-1].text.strip()
     genres = page.find_all('span', class_='c-globalButton_label')[-2].text.strip().split(" ")
