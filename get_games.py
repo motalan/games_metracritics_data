@@ -1,11 +1,13 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+import time
+from tqdm import tqdm
 
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
 params = {'page':1}
 
 def request_page(year:int):
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
     link = f'https://www.metacritic.com/browse/game/all/all/{year}/metascore/'
     request = requests.get(link,headers=headers,params=params)
     page = BeautifulSoup(request.text, 'html.parser')
@@ -42,6 +44,11 @@ def get_games(year: int):
             break
         params['page'] += 1
     
+    params['page'] = 1
+    
     return pd.DataFrame({'Game': games, 'Link': link_games})
 
-get_games(2026).to_csv('data/raw/games_2026.csv',index=False)
+for games in tqdm(range(2000,2027),desc="Processing"):
+    time.sleep(5)
+    df = get_games(games)
+    df.to_csv(f'data/raw/game_year/games_{games}.csv',index=False)
