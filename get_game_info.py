@@ -2,10 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import json
+from tqdm import tqdm
 
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
 params = {'page':1}
-game_data = []
 
 def request_page(link: str):
     base_link = 'https://www.metacritic.com'
@@ -15,11 +15,16 @@ def request_page(link: str):
 
 def game_info(page):
 
-    game_name = page.find('h1').text
-    released_date = page.find_all('div', class_='g-text-xsmall')[1].find_all('span')[-1].text
+    game_name = page.find('h1').text    
     platforms = page.find_all('li', class_='c-gameDetails_listItem g-color-gray70 u-inline-block')
     platforms = [games.text.strip() for games in platforms]
     genres = page.find_all('span', class_='c-globalButton_label')[-2].text.strip()
+
+    try:
+        released_date = page.find_all('div', class_='g-text-xsmall')[1].find_all('span')[-1].text
+    except:
+        released_date = None
+
     try:
         developer = page.find('li', class_='c-gameDetails_listItem u-inline-block g-color-gray70').text.strip()
     except:
@@ -68,11 +73,12 @@ def game_info(page):
     
     return data
 
-dataframe = pd.read_csv('data/raw/game_year/games_2024.csv')
-
+i = 2005
+game_data = []
+dataframe = pd.read_csv(f'data/raw/game_year/games_{i}.csv')
 for game in dataframe['Link'].values:
     page = request_page(game)
     game_data.append(game_info(page))
-
-with open('data/raw/game_info/game_info_2024.json', 'w', encoding='utf-8') as file:
+    print(game)
+with open(f'data/raw/game_info/game_info_{i}.json', 'w', encoding='utf-8') as file:
     json.dump(game_data ,file,indent=4)
