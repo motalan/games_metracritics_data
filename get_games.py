@@ -6,15 +6,14 @@ from tqdm import tqdm
 
 params = {'page':1}
 
-def request_page(year:int):
+def request_page(year:int) -> BeautifulSoup:
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
     link = f'https://www.metacritic.com/browse/game/all/all/{year}/metascore/'
     request = requests.get(link,headers=headers,params=params)
     page = BeautifulSoup(request.text, 'html.parser')
     return page
 
-
-def get_last_page(year: int):
+def get_last_page(year: int) -> int:
     try:
         page = request_page(year)
         last_pages = page.find_all('span', class_='c-navigationPagination_itemButtonContent')
@@ -23,7 +22,7 @@ def get_last_page(year: int):
         last_page_number = 1
     return int(last_page_number)
 
-def get_games(year: int):
+def get_games(year: int) -> pd.DataFrame:
     games = []
     link_games = []
     last_page = get_last_page(year)
