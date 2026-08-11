@@ -9,7 +9,7 @@ def random_user_agent():
     #Generate a random user agent string.
     return ua.random
 
-def fetch_page(url, retries=3, delay=2):
+def fetch_page(url: str, retries=3, delay=2):
     # Fetch a web page with random user agent and retry mechanism.
     for i in range(retries):
         try:
@@ -33,3 +33,12 @@ def fetch_page(url, retries=3, delay=2):
 
     return None
 
+def last_page(url:str) -> int:
+    try:
+        page = fetch_page(url)
+        last_pages = page.find_all('span', class_='c-navigationPagination_itemButtonContent')
+        last_page_number = last_pages[-2].text.strip()
+    except:
+        last_page_number = 1
+
+    return int(last_page_number)
