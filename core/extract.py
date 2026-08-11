@@ -1,13 +1,14 @@
 import requests
 import time
 from fake_useragent import UserAgent
+from bs4 import BeautifulSoup
 
 # Set up a UserAgent instance to generate random user agents
 ua = UserAgent()
 
 def random_user_agent():
     #Generate a random user agent string.
-    return ua.random
+    return str(ua.random)
 
 def fetch_page(url: str, retries=3, delay=2):
     # Fetch a web page with random user agent and retry mechanism.
@@ -36,7 +37,8 @@ def fetch_page(url: str, retries=3, delay=2):
 def last_page(url:str) -> int:
     try:
         page = fetch_page(url)
-        last_pages = page.find_all('span', class_='c-navigationPagination_itemButtonContent')
+        soup = BeautifulSoup(page, 'html.parser')
+        last_pages = soup.find_all('span', class_='c-navigation-pagination__item-content')
         last_page_number = last_pages[-2].text.strip()
     except:
         last_page_number = 1
