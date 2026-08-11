@@ -25,14 +25,17 @@ def get_games(text_page: str) -> list:
 
     return games, link_games
 
+# Function to extract detailed information about a specific game from the HTML content
 def get_game_info(text_page: str) -> list:
     soup = souping(text_page)
 
+    # Basic information about the game that is available for all game's page
     game_name = soup.find('h1').text    
     platforms = soup.find_all('li', class_='c-gameDetails_listItem g-color-gray70 u-inline-block')
     platforms = [games.text.strip() for games in platforms]
     genres = soup.find_all('span', class_='c-globalButton_label')[-2].text.strip()
 
+    # Additional information about the game handling cases where certain elements may not be present
     try:
         released_date = soup.find_all('div', class_='g-text-xsmall')[1].find_all('span')[-1].text
     except:
@@ -68,6 +71,7 @@ def get_game_info(text_page: str) -> list:
         negative_user = None
         user_review = None
 
+    # Create a dictionary to store the extracted game information
     data = {'game_name': game_name,
             'released_date': released_date,
             'metascore_review': metascore_review,
