@@ -4,6 +4,7 @@ import os
 from tqdm import tqdm
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
+from core.parser import get_games
 
 # Set up a UserAgent instance to generate random user agents
 ua = UserAgent()
