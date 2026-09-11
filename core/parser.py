@@ -14,8 +14,8 @@ def get_games(text_page: str) -> list:
     link_games = []
 
     # Find all game titles and links on the page
-    lista = soup.find_all('h3', class_='c-finderProductCard_titleHeading')
-    links = soup.find_all('a', class_='c-finderProductCard_container g-color-gray80 u-grid')
+    lista = soup.find_all('h3', class_='m-0 text-base leading-5.5 font-bold lg:overflow-hidden lg:text-ellipsis lg:line-clamp-1 lg:max-h-5.5 lg:wrap-break-word')
+    links = soup.find_all('a', class_='grid grid-cols-[5.5rem_auto] gap-x-1 gap-y-1 md:gap-x-4 text-gray-800 no-underline')
 
     for i in lista:
         games.append(i.text.split('.', 1)[1].strip())
