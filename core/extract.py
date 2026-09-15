@@ -65,27 +65,27 @@ def collect_game_list(years: list, dir_path: str = 'data/game_list') -> str:
                     with open(f'{dir_path}/y_{y}_pg_{page}.html', 'w', encoding='utf-8') as file:
                         file.write(page_content)
 
-def list_game_links(dir_path: str = 'data/game_list') -> str:
-    links = []
-    if os.path.exists(dir_path):
-        for file_name in os.listdir(dir_path):
-            if file_name.endswith('.html'):
-                with open(os.path.join(dir_path, file_name), 'r', encoding='utf-8') as file:
-                    page_content = file.read()
-                    game_links = get_games(page_content)
-                    links.extend(game_links[1])
-    else: print('Folder not found')
-    return links
+def collect_game_page(dir_path: str = 'data/game_pages', dir_origin: str = 'data/game_list') -> str:
+    base_url = 'https://www.metacritic.com'
 
-def collect_game_page(dir_path: str = 'data/game_pages') -> str:
-    links = list_game_links()
-    for link in tqdm(links, desc="Fetching game pages"):
-        page_content = fetch_page(link)
-        game_id = link.split('/')[-1]
-        if os.path.exists(dir_path):
-            with open(f'{dir_path}/{game_id}.html', 'w', encoding='utf-8') as file:
-                file.write(page_content)
-        else:
-            os.makedirs(dir_path, exist_ok=True)
-            with open(f'{dir_path}/{game_id}.html', 'w', encoding='utf-8') as file:
-                file.write(page_content)
+    if os.path.exists(dir_origin):
+        pass
+    else:
+        os.makedirs(dir_origin, exist_ok=True)
+    
+    
+    for file_name in os.listdir(dir_origin):
+        if file_name.endswith('.html'):
+            with open(os.path.join(dir_origin,file_name), 'r', encoding='utf-8') as file:
+                page_content = file.read()
+                games, links = get_games(page_content)
+
+        for link in tqdm(range(len(links)), desc="Fetching game pages"):
+                page_content = fetch_page(base_url + links[link])
+                if os.path.exists(dir_path):
+                    with open(f'{dir_path}/{games[link]}.html', 'w', encoding='utf-8') as file:
+                        file.write(page_content)
+                else:
+                    os.makedirs(dir_path, exist_ok=True)
+                    with open(f'{dir_path}/{games[link]}.html', 'w', encoding='utf-8') as file:
+                        file.write(page_content)    
