@@ -96,8 +96,3 @@ def get_game_info(text_page: str) -> list:
             }
     
     return data
-
-with open('data/game_pages/Clair Obscur: Expedition 33.html', 'r', encoding='utf-8') as file:
-    page_content = file.read()
-    game_data = get_game_info(page_content)
-    print(game_data)
