@@ -31,45 +31,51 @@ def get_game_info(text_page: str) -> list:
 
     # Basic information about the game that is available for all game's page
     game_name = soup.find('h1').text    
-    platforms = soup.find_all('li', class_='c-gameDetails_listItem g-color-gray70 u-inline-block')
+    platforms = soup.find_all('li', class_='c-product-details__section__list-item')
     platforms = [games.text.strip() for games in platforms]
-    genres = soup.find_all('span', class_='c-globalButton_label')[-2].text.strip()
+    genres = soup.find_all('span', class_='global-link-button__label')[-2].text.strip()
 
     # Additional information about the game handling cases where certain elements may not be present
     try:
-        released_date = soup.find_all('div', class_='g-text-xsmall')[1].find_all('span')[-1].text
+        released_date = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[1].find_all('span')[-1].text
     except:
         released_date = None
-
     try:
-        developer = soup.find('li', class_='c-gameDetails_listItem u-inline-block g-color-gray70').text.strip()
+        developer = soup.find('a', class_='text-gray-800 underline').text.strip()
     except:
-        developer = soup.find_all('a', class_='u-text-underline')[-2].text.strip()
+        developer = soup.find_all('div', class_='flex flex-col items-stretch gap-2 pt-8 max-lg:pt-0')[0].find_all('span')[-1].text
     try:
-       publisher = soup.find('span', class_='g-outer-spacing-left-medium-fluid u-block g-color-gray70').text.strip()
+       publisher = soup.find_all('a', class_='c-product-detail-link')[-1].text.strip()
     except:
-        publisher = soup.find_all('a', class_='u-text-underline')[-1].text.strip()
+        publisher = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[-1].find_all('span')[-1].text
     
     try:
-        metascore_review = soup.find('div', class_='c-siteReviewScore_medium').text
-        positive_critic = soup.find('div', class_='c-reviewsStats_positiveStats').find_all('span')[-1].text.split(' ')[0]
-        mixed_critic = soup.find('div', class_='c-reviewsStats_neutralStats').find_all('span')[-1].text.split(' ')[0]
-        negative_critic = soup.find('div', class_='c-reviewsStats_negativeStats').find_all('span')[-1].text.split(' ')[0]
+        metascore_review = soup.find('div', class_='flex flex-col items-center gap-1 self-start').text
+        positive_critic = soup.find('div', class_='reviews-stats__positive-stats').find_all('span')[-1].text.split(' ')[0]
+        mixed_critic = soup.find('div', class_='reviews-stats__neutral-stats').find_all('span')[-1].text.split(' ')[0]
+        negative_critic = soup.find('div', class_='reviews-stats__negative-stats').find_all('span')[-1].text.split(' ')[0]
     except:
         positive_critic = None
         mixed_critic = None
         negative_critic = None
         metascore_review = None
     try:
-        user_review = soup.find_all('div', class_='c-siteReviewScore_medium')[1].find('span').text
-        positive_user = soup.find_all('div', class_='c-reviewsStats_positiveStats')[2].find_all('span')[-1].text.split(' ')[0]
-        mixed_user = soup.find_all('div', class_='c-reviewsStats_neutralStats')[2].find_all('span')[-1].text.split(' ')[0]
-        negative_user = soup.find_all('div', class_='c-reviewsStats_negativeStats')[2].find_all('span')[-1].text.split(' ')[0]
+        user_review = soup.find_all('div', class_='flex flex-col items-center gap-1 self-start')[1].find('span').text
+        positive_user = soup.find_all('div', class_='reviews-stats__positive-stats')[1].find_all('span')[-1].text.split(' ')[0]
+        mixed_user = soup.find_all('div', class_='reviews-stats__neutral-stats')[1].find_all('span')[-1].text.split(' ')[0]
+        negative_user = soup.find_all('div', class_='reviews-stats__negative-stats')[1].find_all('span')[-1].text.split(' ')[0]
     except:
         positive_user = None
         mixed_user = None
         negative_user = None
         user_review = None
+
+    # Must play is a boolean value that indicates whether the game is considered a "must play" title based on the presence of a specific HTML element
+    if soup.find('div', class_='size-12 md:size-13 shrink-0') is not None:
+        must_play = 1
+    else:
+        must_play = 0
+
 
     # Create a dictionary to store the extracted game information
     data = {'game_name': game_name,
@@ -85,7 +91,13 @@ def get_game_info(text_page: str) -> list:
             'negative_critic': negative_critic,
             'positive_user': positive_user,
             'mixed_user': mixed_user,
-            'negative_user': negative_user
+            'negative_user': negative_user,
+            'must_play': must_play
             }
     
     return data
+
+with open('data/game_pages/Clair Obscur: Expedition 33.html', 'r', encoding='utf-8') as file:
+    page_content = file.read()
+    game_data = get_game_info(page_content)
+    print(game_data)
