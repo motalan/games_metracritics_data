@@ -1,18 +1,22 @@
 from pydantic import BaseModel
 from datetime import date, datetime
 
-class Platforms(BaseModel):
-    platform_name: str
-
-class Companies(BaseModel):
-    company_name: str
-
-class Genre(BaseModel):
-    genre_name: str
-
-class Game(BaseModel):
+class GameInfo(BaseModel):
     game_name: str
     released_date: date
+    metascore_review: int
+    user_review: int
+    platforms: list[str]
+    developer: int
+    publisher: str
+    genres: list[str]
+    positive_critic: int
+    mixed_critic: int
+    negative_critic: int
+    positive_user: int
+    mixed_user: int
+    negative_user: int
+    must_play: bool
     summary: str
 
 int_keys = [
@@ -57,3 +61,8 @@ def genre_transform(data: dict) -> dict:
         data['genres'] = [genre.replace("-", " ") for genre in data['genres'].split(' ')]
     return data
 
+def data_normalization(data: dict) -> GameInfo:
+    data = date_transform(data)
+    data = number_transform_int(data)
+    data = genre_transform(data)
+    return GameInfo(**data)
