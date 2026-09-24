@@ -7,7 +7,7 @@ class GameInfo(BaseModel):
     metascore_review: int
     user_review: int
     platforms: list[str]
-    developer: int
+    developer: str
     publisher: str
     genres: list[str]
     positive_critic: int
@@ -17,7 +17,6 @@ class GameInfo(BaseModel):
     mixed_user: int
     negative_user: int
     must_play: bool
-    summary: str
 
 int_keys = [
     'metascore_review',

@@ -76,13 +76,6 @@ def get_game_info(text_page: str) -> list:
     else:
         must_play = 0
 
-    # Summary is a brief description of the game, extracted from a specific HTML element if it exists
-    if soup.find('div', class_='text-base leading-[1.75rem] text-gray-900 max-md:leading-4') is not None:
-        summary = soup.find('div', class_='text-base leading-[1.75rem] text-gray-900 max-md:leading-4').text
-    else:
-        summary = None
-
-
     # Create a dictionary to store the extracted game information
     data = {'game_name': game_name,
             'released_date': released_date,
@@ -98,8 +91,7 @@ def get_game_info(text_page: str) -> list:
             'positive_user': positive_user,
             'mixed_user': mixed_user,
             'negative_user': negative_user,
-            'must_play': must_play,
-            'summary': summary
+            'must_play': must_play
             }
     
     return data
