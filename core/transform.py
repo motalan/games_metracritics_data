@@ -10,23 +10,23 @@ class GameInfo(BaseModel):
     developer: str
     publisher: str
     genres: list[str]
-    positive_critic: int
-    mixed_critic: int
-    negative_critic: int
-    positive_user: int
-    mixed_user: int
-    negative_user: int
+    critic_positive: int
+    critic_mixed: int
+    critic_negative: int
+    users_positive: int
+    users_mixed: int
+    users_negative: int
     must_play: bool
 
 int_keys = [
     'metascore_review',
     'user_review',
-    'positive_critic',
-    'mixed_critic', 
-    'negative_critic', 
-    'positive_user', 
-    'mixed_user', 
-    'negative_user'
+    'critic_positive',
+    'critic_mixed', 
+    'critic_negative', 
+    'users_positive', 
+    'users_mixed', 
+    'users_negative'
     ]
 
 # Validator function to ensure the date is in the correct format

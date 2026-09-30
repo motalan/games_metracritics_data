@@ -85,12 +85,12 @@ def get_game_info(text_page: str) -> list:
             'developer': developer,
             'publisher': publisher,
             'genres': genres,
-            'positive_critic': positive_critic,
-            'mixed_critic': mixed_critic,
-            'negative_critic': negative_critic,
-            'positive_user': positive_user,
-            'mixed_user': mixed_user,
-            'negative_user': negative_user,
+            'critic_positive': positive_critic,
+            'critic_mixed': mixed_critic,
+            'critic_negative': negative_critic,
+            'users_positive': positive_user,
+            'users_mixed': mixed_user,
+            'users_negative': negative_user,
             'must_play': must_play
             }
     
