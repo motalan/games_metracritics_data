@@ -3,19 +3,19 @@ from datetime import date, datetime
 
 class GameInfo(BaseModel):
     game_name: str
-    released_date: date
-    metascore_review: int
-    user_review: int
+    released_date: date | None
+    metascore_review: int | None
+    user_review: int | None
     platforms: list[str]
     developer: str
     publisher: str
     genres: list[str]
-    critic_positive: int
-    critic_mixed: int
-    critic_negative: int
-    users_positive: int
-    users_mixed: int
-    users_negative: int
+    critic_positive: int | None
+    critic_mixed: int | None
+    critic_negative: int | None
+    users_positive: int | None
+    users_mixed: int | None
+    users_negative: int | None
     must_play: bool
 
 int_keys = [
