@@ -24,7 +24,6 @@ def create_connection():
 # Create tables and constraints in the database
 def create_tables():
     connection = create_connection()
-
     cursor = connection.cursor()
 
     # Create the platforms table
@@ -33,7 +32,7 @@ def create_tables():
             platform_id SERIAL PRIMARY KEY,
             platform_name VARCHAR(255) NOT NULL
         );
-    ''')
+        ''')
 
     # Create the genres table
     cursor.execute('''
@@ -66,7 +65,7 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS critic_reviews (
             review_id SERIAL PRIMARY KEY,
-            FOREIGN KEY game_id REFERENCES game (game_id),
+            game_id INT REFERENCES game (game_id),
             metascore_review INT NOT NULL,
             critic_positive INT NOT NULL,
             critic_mixed INT NOT NULL,
@@ -78,7 +77,7 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users_reviews (
             review_id SERIAL PRIMARY KEY,
-            FOREIGN KEY game_id REFERENCES game (game_id),
+            game_id INT REFERENCES game (game_id),
             users_overall_score INT NOT NULL,
             users_positive INT NOT NULL,
             users_mixed INT NOT NULL,
@@ -89,39 +88,32 @@ def create_tables():
     # Create the game_platforms table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS game_platforms (
-            game_id INT NOT NULL,
-            platform_id INT NOT NULL,
-            PRIMARY KEY (game_id, platform_id),
-            FOREIGN KEY (game_id) REFERENCES game (game_id),
-            FOREIGN KEY (platform_id) REFERENCES platform (platform_id)
+            game_id INT REFERENCES game (game_id),
+            platform_id INT REFERENCES platform (platform_id),
+            PRIMARY KEY (game_id, platform_id)
         );
     ''')
 
     # Create the game_genres table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS game_genres (
-            game_id INT NOT NULL,
-            genre_id INT NOT NULL,
-            PRIMARY KEY (game_id, genre_id),
-            FOREIGN KEY (game_id) REFERENCES game (game_id),
-            FOREIGN KEY (genre_id) REFERENCES genre (genre_id)
+            game_id INT REFERENCES game (game_id),
+            genre_id INT REFERENCES genre (genre_id),
+            PRIMARY KEY (game_id, genre_id)
         );
     ''')
 
     # Create the game_companies table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS game_companies (
-            game_id INT NOT NULL,
-            company_id INT NOT NULL,
+            game_id INT REFERENCES game (game_id),
+            company_id INT REFERENCES company (company_id),
             bond_type VARCHAR(255) NOT NULL,
-            PRIMARY KEY (game_id, company_id),
-            FOREIGN KEY (game_id) REFERENCES games (game_id),
-            FOREIGN KEY (company_id) REFERENCES companies (company_id)
+            PRIMARY KEY (game_id, company_id)
         );
     ''')
 
     # Commit the changes and close the connection
-
     connection.commit()
     cursor.close()
     connection.close()
@@ -145,3 +137,4 @@ def insert_data(table_name: str, data: dict):
 
     return cursor.fetchone()  # Return the inserted row
 
+create_tables()  # Create tables when the module is imported
