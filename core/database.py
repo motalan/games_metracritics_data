@@ -1,6 +1,7 @@
 import psycopg2
 from dotenv import load_dotenv
 import os
+from core.transform import GameInfo
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,11 +27,24 @@ def create_tables():
     connection = create_connection()
     cursor = connection.cursor()
 
+    # Create the scrape runs table (one row per scraping execution)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scrape_run (
+            run_id SERIAL PRIMARY KEY,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            finished_at TIMESTAMPTZ,
+            status VARCHAR(20) NOT NULL DEFAULT 'running',
+            years INT[],
+            s3_prefix VARCHAR(255),
+            games_scraped INT DEFAULT 0
+        );
+    ''')
+
     # Create the platforms table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS platform (
             platform_id SERIAL PRIMARY KEY,
-            platform_name VARCHAR(255) NOT NULL
+            platform_name VARCHAR(255) NOT NULL UNIQUE
         );
         ''')
 
@@ -38,7 +52,7 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS genre (
             genre_id SERIAL PRIMARY KEY,
-            genre_name VARCHAR(255) NOT NULL
+            genre_name VARCHAR(255) NOT NULL UNIQUE
         );
     ''')
 
@@ -46,42 +60,50 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS company (
             company_id SERIAL PRIMARY KEY,
-            company_name VARCHAR(255) NOT NULL
+            company_name VARCHAR(255) NOT NULL UNIQUE
             );
         ''')
 
-    # Create the games table
+    # Create the games table (game_slug is the metacritic link, e.g. /game/elden-ring/)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS game (
             game_id SERIAL PRIMARY KEY,
+            game_slug VARCHAR(255) NOT NULL UNIQUE,
             game_name VARCHAR(255) NOT NULL,
             released_date DATE,
-            must_play BOOLEAN NOT NULL
+            first_seen_run_id INT REFERENCES scrape_run (run_id)
     );
     '''
     )
 
-    # Create the critic reviews table
+    # Create the critic reviews table (one snapshot per game per scrape run)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS critic_reviews (
             review_id SERIAL PRIMARY KEY,
-            game_id INT REFERENCES game (game_id),
-            metascore_review INT NOT NULL,
-            critic_positive INT NOT NULL,
-            critic_mixed INT NOT NULL,
-            critic_negative INT NOT NULL
+            run_id INT NOT NULL REFERENCES scrape_run (run_id),
+            game_id INT NOT NULL REFERENCES game (game_id),
+            collected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            metascore_review INT,
+            critic_positive INT,
+            critic_mixed INT,
+            critic_negative INT,
+            must_play BOOLEAN NOT NULL,
+            UNIQUE (game_id, run_id)
         );
     ''')
 
-    # Create the users reviews table
+    # Create the users reviews table (one snapshot per game per scrape run)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users_reviews (
             review_id SERIAL PRIMARY KEY,
-            game_id INT REFERENCES game (game_id),
-            users_overall_score INT NOT NULL,
-            users_positive INT NOT NULL,
-            users_mixed INT NOT NULL,
-            users_negative INT NOT NULL
+            run_id INT NOT NULL REFERENCES scrape_run (run_id),
+            game_id INT NOT NULL REFERENCES game (game_id),
+            collected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            users_overall_score INT,
+            users_positive INT,
+            users_mixed INT,
+            users_negative INT,
+            UNIQUE (game_id, run_id)
         );
     ''')
 
@@ -109,8 +131,23 @@ def create_tables():
             game_id INT REFERENCES game (game_id),
             company_id INT REFERENCES company (company_id),
             bond_type VARCHAR(255) NOT NULL,
-            PRIMARY KEY (game_id, company_id)
+            PRIMARY KEY (game_id, company_id, bond_type)
         );
+    ''')
+
+    # Create views with the most recent snapshot of each game
+    cursor.execute('''
+        CREATE OR REPLACE VIEW latest_critic_reviews AS
+        SELECT DISTINCT ON (game_id) *
+        FROM critic_reviews
+        ORDER BY game_id, collected_at DESC;
+    ''')
+
+    cursor.execute('''
+        CREATE OR REPLACE VIEW latest_users_reviews AS
+        SELECT DISTINCT ON (game_id) *
+        FROM users_reviews
+        ORDER BY game_id, collected_at DESC;
     ''')
 
     # Commit the changes and close the connection
@@ -129,12 +166,114 @@ def insert_data(table_name: str, data: dict):
     placeholders = ', '.join(['%s'] * len(data))
     sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders}) RETURNING *;"
     cursor.execute(sql, list(data.values()))
+    inserted_row = cursor.fetchone()
 
     # Commit the changes and close the connection
     connection.commit()
     cursor.close()
     connection.close()
 
-    return cursor.fetchone()  # Return the inserted row
+    return inserted_row  # Return the inserted row
 
-create_tables()  # Create tables when the module is imported
+# Register a new scrape run and return its id
+def start_run(connection, years: list) -> int:
+    cursor = connection.cursor()
+
+    cursor.execute("INSERT INTO scrape_run (years) VALUES (%s) RETURNING run_id;", (years,))
+    run_id = cursor.fetchone()[0]
+
+    # Raw HTML of this run is stored under its own prefix in the S3 bucket
+    cursor.execute("UPDATE scrape_run SET s3_prefix = %s WHERE run_id = %s;", (f'runs/{run_id}/', run_id))
+
+    connection.commit()
+    cursor.close()
+
+    return run_id
+
+# Close a scrape run with its final status (success | failed)
+def finish_run(connection, run_id: int, status: str, games_scraped: int):
+    cursor = connection.cursor()
+
+    cursor.execute('''
+        UPDATE scrape_run
+        SET finished_at = now(), status = %s, games_scraped = %s
+        WHERE run_id = %s;
+    ''', (status, games_scraped, run_id))
+
+    connection.commit()
+    cursor.close()
+
+# Insert a value into a lookup table (platform, genre, company) if it doesn't exist and return its id
+def get_or_create(connection, table_name: str, value: str) -> int:
+    cursor = connection.cursor()
+
+    # DO UPDATE (instead of DO NOTHING) makes RETURNING also work when the row already exists
+    sql = f'''
+        INSERT INTO {table_name} ({table_name}_name) VALUES (%s)
+        ON CONFLICT ({table_name}_name) DO UPDATE SET {table_name}_name = EXCLUDED.{table_name}_name
+        RETURNING {table_name}_id;
+    '''
+    cursor.execute(sql, (value,))
+    row_id = cursor.fetchone()[0]
+
+    cursor.close()
+
+    return row_id
+
+# Insert or update a game and its platforms, genres and companies, returning the game id
+def upsert_game(connection, game: GameInfo, game_slug: str, run_id: int) -> int:
+    cursor = connection.cursor()
+
+    cursor.execute('''
+        INSERT INTO game (game_slug, game_name, released_date, first_seen_run_id)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (game_slug) DO UPDATE
+        SET game_name = EXCLUDED.game_name, released_date = EXCLUDED.released_date
+        RETURNING game_id;
+    ''', (game_slug, game.game_name, game.released_date, run_id))
+    game_id = cursor.fetchone()[0]
+
+    for platform in game.platforms:
+        platform_id = get_or_create(connection, 'platform', platform)
+        cursor.execute('''
+            INSERT INTO game_platforms (game_id, platform_id) VALUES (%s, %s)
+            ON CONFLICT DO NOTHING;
+        ''', (game_id, platform_id))
+
+    for genre in game.genres:
+        genre_id = get_or_create(connection, 'genre', genre)
+        cursor.execute('''
+            INSERT INTO game_genres (game_id, genre_id) VALUES (%s, %s)
+            ON CONFLICT DO NOTHING;
+        ''', (game_id, genre_id))
+
+    for bond_type, company in [('developer', game.developer), ('publisher', game.publisher)]:
+        company_id = get_or_create(connection, 'company', company)
+        cursor.execute('''
+            INSERT INTO game_companies (game_id, company_id, bond_type) VALUES (%s, %s, %s)
+            ON CONFLICT DO NOTHING;
+        ''', (game_id, company_id, bond_type))
+
+    connection.commit()
+    cursor.close()
+
+    return game_id
+
+# Save the critic and users reviews of a game as a snapshot of the given scrape run
+def save_snapshot(connection, run_id: int, game_id: int, game: GameInfo):
+    cursor = connection.cursor()
+
+    cursor.execute('''
+        INSERT INTO critic_reviews (run_id, game_id, metascore_review, critic_positive, critic_mixed, critic_negative, must_play)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (game_id, run_id) DO NOTHING;
+    ''', (run_id, game_id, game.metascore_review, game.critic_positive, game.critic_mixed, game.critic_negative, game.must_play))
+
+    cursor.execute('''
+        INSERT INTO users_reviews (run_id, game_id, users_overall_score, users_positive, users_mixed, users_negative)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (game_id, run_id) DO NOTHING;
+    ''', (run_id, game_id, game.user_review, game.users_positive, game.users_mixed, game.users_negative))
+
+    connection.commit()
+    cursor.close()
