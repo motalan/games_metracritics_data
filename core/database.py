@@ -1,7 +1,10 @@
 import psycopg2
 from dotenv import load_dotenv
 import os
+import logging
 from core.transform import GameInfo
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,7 +22,7 @@ def create_connection():
         )
         return connection
     except psycopg2.Error as e:
-        print(f"Error connecting to PostgreSQL: {e}")
+        logger.error(f"Error connecting to PostgreSQL: {e}")
         return None
 
 # Create tables and constraints in the database
