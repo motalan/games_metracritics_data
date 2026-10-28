@@ -1,10 +1,13 @@
 import requests
 import time
 import os
+import logging
 from tqdm import tqdm
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 from core.parser import get_games
+
+logger = logging.getLogger(__name__)
 
 # Set up a UserAgent instance to generate random user agents
 ua = UserAgent()
@@ -24,7 +27,7 @@ def fetch_page(url: str, retries=3, delay=2):
 
             if response.status_code in [403,429]:
                 # If the response status code is 403 or 429, wait and retry
-                print(f"Received status code {response.status_code}. Retrying in {delay} seconds...")
+                logger.warning(f"Received status code {response.status_code} for {url}. Retrying in {delay * 2} seconds...")
                 time.sleep(delay * 2)
                 continue
 
@@ -32,9 +35,10 @@ def fetch_page(url: str, retries=3, delay=2):
             return response.text
 
         except requests.RequestException as e:
-            print(f"Request failed: {e}.")
+            logger.warning(f"Request failed for {url}: {e}.")
             time.sleep(delay)
 
+    logger.error(f"Giving up on {url} after {retries} retries.")
     return None
 
 def last_page(url:str) -> int:
@@ -82,10 +86,16 @@ def collect_game_page(dir_path: str = 'data/game_pages', dir_origin: str = 'data
 
         for link in tqdm(range(len(links)), desc="Fetching game pages"):
                 page_content = fetch_page(base_url + links[link])
+                if page_content is None:
+                    logger.error(f"Skipping {games[link]}: page could not be fetched.")
+                    continue
+
+                # Save the page by its slug to keep the link to the game
+                slug = links[link].strip('/').split('/')[-1]
                 if os.path.exists(dir_path):
-                    with open(f'{dir_path}/{games[link]}.html', 'w', encoding='utf-8') as file:
+                    with open(f'{dir_path}/{slug}.html', 'w', encoding='utf-8') as file:
                         file.write(page_content)
                 else:
                     os.makedirs(dir_path, exist_ok=True)
-                    with open(f'{dir_path}/{games[link]}.html', 'w', encoding='utf-8') as file:
-                        file.write(page_content)    
+                    with open(f'{dir_path}/{slug}.html', 'w', encoding='utf-8') as file:
+                        file.write(page_content)
