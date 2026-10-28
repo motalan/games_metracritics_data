@@ -6,7 +6,7 @@ import os
 # Loading environment variables from .env file
 load_dotenv()
 
-def upload_files_to_s3(path_origin: str):
+def upload_files_to_s3(path_origin: str, run_id: int):
 
     # Create an S3 client using credentials from environment variables
     s3 = boto3.client(
@@ -22,6 +22,6 @@ def upload_files_to_s3(path_origin: str):
     # Iterate through files in the specified directory
     for file_name in os.listdir(path_origin):
         if file_name.endswith('.html'):
-            # Upload each HTML file to the S3 bucket
-            s3.upload_file(f'{path_origin}/{file_name}', BUCKET, f'game_pages/{file_name}')
+            # Upload each HTML file to the S3 bucket, under the prefix of its scrape run
+            s3.upload_file(f'{path_origin}/{file_name}', BUCKET, f'runs/{run_id}/game_pages/{file_name}')
             print(f"Uploaded {file_name} to S3 bucket {BUCKET}.")
