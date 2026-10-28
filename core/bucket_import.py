@@ -2,6 +2,9 @@ import boto3
 from botocore.config import Config
 from dotenv import load_dotenv
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Loading environment variables from .env file
 load_dotenv()
@@ -18,10 +21,16 @@ def upload_files_to_s3(path_origin: str, run_id: int):
     )
 
     BUCKET = "metacritic"
-    
+    uploaded = 0
+
     # Iterate through files in the specified directory
     for file_name in os.listdir(path_origin):
         if file_name.endswith('.html'):
             # Upload each HTML file to the S3 bucket, under the prefix of its scrape run
             s3.upload_file(f'{path_origin}/{file_name}', BUCKET, f'runs/{run_id}/game_pages/{file_name}')
-            print(f"Uploaded {file_name} to S3 bucket {BUCKET}.")
+            logger.debug(f"Uploaded {file_name} to S3 bucket {BUCKET}.")
+            uploaded += 1
+
+    logger.info(f"Uploaded {uploaded} files to s3://{BUCKET}/runs/{run_id}/game_pages/.")
+
+    return uploaded
