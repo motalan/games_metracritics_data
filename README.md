@@ -6,15 +6,15 @@ Each execution is recorded as a **scrape run**, and the critic and user scores a
 
 ## How it works
 
-`main.py` runs these stages in order. Each stage logs its start, its end and how long it took.
+`main.py` runs these stages in order. Each stage logs its start, its end and how long it took. Stage 1 runs once; stages 2–7 run once per requested year, and one year finishes before the next one starts (e.g. `--years 1996 1997` processes all of 1996, then all of 1997).
 
 1. **create_tables**: creates the database tables and views if they don't exist yet ([core/database.py](core/database.py)).
-2. **start_run**: registers a new row in `scrape_run`. The HTML of each run is saved under `data/runs/<run_id>/`.
+2. **start_run**: registers a new row in `scrape_run` for the year (`years` holds that single year). The HTML of each run is saved under `data/runs/<run_id>/`.
 3. **collect_game_list**: downloads every page of `metacritic.com/browse/game/all/all/<year>/metascore/` for each requested year ([core/extract.py](core/extract.py)). Requests use a random User-Agent and are retried up to 3 times, with a longer wait on `403`/`429` responses.
 4. **collect_game_page**: reads the game links from the list pages and downloads each game page, saving it as `<slug>.html` (e.g. `elden-ring.html`).
 5. **upload_files_to_s3**: uploads the game pages to `s3://metacritic/runs/<run_id>/game_pages/` ([core/bucket_import.py](core/bucket_import.py)).
 6. **load_games**: parses each page ([core/parser.py](core/parser.py)), then normalizes and validates it with the Pydantic `GameInfo` model ([core/transform.py](core/transform.py)). The game is upserted and its review snapshot is saved. If a page fails to parse, the error is logged and the run moves on to the next page.
-7. **finish_run**: closes the run with its status (`success` or `failed`), the number of games saved and the finish time.
+7. **finish_run**: closes the run with its status (`success` or `failed`), the number of games saved and the finish time. A failed year is logged and the pipeline moves on to the next year.
 
 ## Project structure
 
