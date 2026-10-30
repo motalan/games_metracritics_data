@@ -25,14 +25,23 @@ def get_games(text_page: str) -> list:
 
     return games, link_games
 
+# Find a product details section by its label (e.g. 'Platforms:')
+def product_details_section(soup: BeautifulSoup, label: str):
+    for section in soup.find_all('div', class_='c-product-details__section'):
+        section_label = section.find('span', class_='c-product-details__section__label')
+        if section_label is not None and section_label.text.strip() == label:
+            return section
+    return None
+
 # Function to extract detailed information about a specific game from the HTML content
 def get_game_info(text_page: str) -> list:
     soup = souping(text_page)
 
     # Basic information about the game that is available for all game's page
     game_name = soup.find('h1').text    
-    platforms = soup.find_all('li', class_='c-product-details__section__list-item')
-    platforms = [games.text.strip() for games in platforms]
+    # The publisher section uses the same list item class, so only the platforms section is read
+    platforms_section = product_details_section(soup, 'Platforms:')
+    platforms = [item.text.strip() for item in platforms_section.find_all('li', class_='c-product-details__section__list-item')] if platforms_section else []
     genres = soup.find_all('span', class_='global-link-button__label')[-2].text.strip()
 
     # Additional information about the game handling cases where certain elements may not be present
