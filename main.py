@@ -76,21 +76,12 @@ def load_games(connection, run_id: int, dir_pages: str) -> int:
 
     return saved
 
-def main():
-    args = parse_args()
-    log_file = setup_logging(args.log_level)
-    pipeline_start = time.perf_counter()
+# Run the full pipeline for a single year as its own scrape run, returning its status and how many games were saved
+def run_year(connection, year: int) -> tuple[str, int]:
+    run_start = time.perf_counter()
 
-    connection = create_connection()
-    if connection is None:
-        logger.error("Aborting pipeline: could not connect to the database.")
-        return
-
-    with stage('create_tables'):
-        create_tables()
-
-    run_id = start_run(connection, args.years)
-    logger.info(f"Scrape run {run_id} started for years {args.years}. Log file: {log_file}")
+    run_id = start_run(connection, [year])
+    logger.info(f"Scrape run {run_id} started for year {year}.")
 
     # Each run keeps its own HTML so old pages are not uploaded or saved again
     dir_list = f'data/runs/{run_id}/game_list'
@@ -103,7 +94,7 @@ def main():
 
     try:
         with stage('collect_game_list'):
-            collect_game_list(args.years, dir_list)
+            collect_game_list([year], dir_list)
         logger.info(f"{count_html(dir_list)} list pages saved in {dir_list}.")
 
         with stage('collect_game_page'):
@@ -119,14 +110,43 @@ def main():
         status = 'success'
 
     except Exception:
-        logger.exception(f"Scrape run {run_id} failed.")
-        raise
+        # A failed year must not stop the following years
+        logger.exception(f"Scrape run {run_id} (year {year}) failed.")
 
     finally:
         connection.rollback()  # Discard any transaction left open by a failure
         finish_run(connection, run_id, status, games_scraped)
+        logger.info(f"Scrape run {run_id} (year {year}) finished with status '{status}': {games_scraped} games in {time.perf_counter() - run_start:.1f}s.")
+
+    return status, games_scraped
+
+def main():
+    args = parse_args()
+    log_file = setup_logging(args.log_level)
+    pipeline_start = time.perf_counter()
+
+    connection = create_connection()
+    if connection is None:
+        logger.error("Aborting pipeline: could not connect to the database.")
+        return
+
+    logger.info(f"Pipeline started for years {args.years}. Log file: {log_file}")
+
+    with stage('create_tables'):
+        create_tables()
+
+    # Each year runs the whole pipeline before the next one starts
+    results = {}
+    try:
+        for year in args.years:
+            with stage(f'year {year}'):
+                results[year] = run_year(connection, year)
+    finally:
         connection.close()
-        logger.info(f"Scrape run {run_id} finished with status '{status}': {games_scraped} games in {time.perf_counter() - pipeline_start:.1f}s.")
+
+    failed_years = [year for year, (status, _) in results.items() if status != 'success']
+    total_games = sum(games for _, games in results.values())
+    logger.info(f"Pipeline finished: {len(results) - len(failed_years)} years succeeded, failed years: {failed_years or 'none'}, {total_games} games in {time.perf_counter() - pipeline_start:.1f}s.")
 
 
 if __name__ == "__main__":
