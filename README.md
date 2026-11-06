@@ -1,20 +1,40 @@
 # Games Data
 
-An ETL pipeline that scrapes video game data from [Metacritic](https://www.metacritic.com) for one or more release years. It stores the raw HTML pages in an S3-compatible bucket (RustFS) and loads the normalized data into PostgreSQL.
+An ETL pipeline that scrapes video game data from [Metacritic](https://www.metacritic.com) for one or more release years. The raw HTML pages are stored only in an S3-compatible bucket (RustFS), never on the local disk, and every parsing step reads them back from the bucket before loading the normalized data into PostgreSQL.
 
-Each execution is recorded as a **scrape run**, and the critic and user scores are saved as a snapshot per run. This keeps the history of how a game's reviews change over time.
+Each execution is recorded as a **scrape run**, and the critic and user scores are saved as a snapshot per run. This keeps the history of how a game's reviews change over time. In the bucket, the pages are organized by the **date** of the execution, so the history can be browsed by period.
 
 ## How it works
 
-`main.py` runs these stages in order. Each stage logs its start, its end and how long it took. Stage 1 runs once; stages 2–7 run once per requested year, and one year finishes before the next one starts (e.g. `--years 1996 1997` processes all of 1996, then all of 1997).
+`main.py` runs these stages in order. Each stage logs its start, its end and how long it took. Stage 1 runs once; stages 2–6 run once per requested year, and one year finishes before the next one starts (e.g. `--years 1996 1997` processes all of 1996, then all of 1997).
 
 1. **create_tables**: creates the database tables and views if they don't exist yet ([core/database.py](core/database.py)).
-2. **start_run**: registers a new row in `scrape_run` for the year (`years` holds that single year). The HTML of each run is saved under `data/runs/<run_id>/`.
-3. **collect_game_list**: downloads every page of `metacritic.com/browse/game/all/all/<year>/metascore/` for each requested year ([core/extract.py](core/extract.py)). Requests use a random User-Agent and are retried up to 3 times, with a longer wait on `403`/`429` responses.
-4. **collect_game_page**: reads the game links from the list pages and downloads each game page, saving it as `<slug>.html` (e.g. `elden-ring.html`).
-5. **upload_files_to_s3**: uploads the game pages to `s3://metacritic/runs/<run_id>/game_pages/` ([core/bucket_import.py](core/bucket_import.py)).
-6. **load_games**: parses each page ([core/parser.py](core/parser.py)), then normalizes and validates it with the Pydantic `GameInfo` model ([core/transform.py](core/transform.py)). The game is upserted and its review snapshot is saved. If a page fails to parse, the error is logged and the run moves on to the next page.
-7. **finish_run**: closes the run with its status (`success` or `failed`), the number of games saved and the finish time. A failed year is logged and the pipeline moves on to the next year.
+2. **start_run**: registers a new row in `scrape_run` for the year (`years` holds that single year) with its bucket prefix, `runs/<YYYY-MM-DD>/<year>/`.
+3. **collect_game_list**: downloads every page of `metacritic.com/browse/game/all/all/<year>/metascore/` and uploads it straight to `<prefix>game_list/` ([core/extract.py](core/extract.py)). Requests use a random User-Agent and are retried up to 3 times, with a longer wait on `403`/`429` responses. A page that can't be fetched is logged and skipped.
+4. **collect_game_page**: reads the list pages back from the bucket, extracts the game links and uploads each game page to `<prefix>game_pages/<slug>.html` (e.g. `elden-ring.html`).
+5. **load_games**: reads each game page from the bucket, parses it ([core/parser.py](core/parser.py)), then normalizes and validates it with the Pydantic `GameInfo` model ([core/transform.py](core/transform.py)). The game is upserted and its review snapshot is saved. If a page fails to parse, the error is logged and the run moves on to the next page.
+6. **finish_run**: closes the run with its status (`success` or `failed`), the number of games saved and the finish time. A failed year is logged and the pipeline moves on to the next year.
+
+## Bucket layout
+
+All pages go to the `metacritic` bucket, grouped by the date the pipeline ran and then by release year. The date is taken once at the start, so every year of the same execution shares it.
+
+```
+metacritic/
+└── runs/
+    └── 2026-11-05/                  # execution date
+        └── 2024/                    # release year
+            ├── game_list/
+            │   ├── y_2024_pg_1.html
+            │   └── y_2024_pg_2.html
+            └── game_pages/
+                ├── elden-ring.html
+                └── astro-bot.html
+```
+
+Running the pipeline again on the same day overwrites that day's pages. Each execution still gets its own `scrape_run` row and review snapshot in the database.
+
+[core/bucket_import.py](core/bucket_import.py) holds the bucket helpers: `run_prefix` builds the prefix, `upload_content` uploads a page kept in memory, `list_files` lists the keys under a prefix (with pagination) and `read_file` returns a page's HTML.
 
 ## Project structure
 
@@ -25,17 +45,12 @@ Each execution is recorded as a **scrape run**, and the critic and user scores a
 │   ├── extract.py        # HTTP requests and HTML download
 │   ├── parser.py         # HTML parsing with BeautifulSoup
 │   ├── transform.py      # Data normalization and the GameInfo model
-│   ├── bucket_import.py  # Upload of raw HTML to the S3 bucket
+│   ├── bucket_import.py  # Upload, listing and reading of raw HTML in the S3 bucket
 │   └── database.py       # PostgreSQL schema, upserts and snapshots
-├── get_games.py          # Legacy script (not used by the pipeline)
-├── get_game_info.py      # Legacy script (not used by the pipeline)
 ├── pyproject.toml
 └── data/                 # Generated at runtime (gitignored)
-    ├── runs/<run_id>/    # game_list/ and game_pages/ HTML per run
-    └── logs/             # One log file per execution
+    └── logs/             # One log file per execution (the only local output)
 ```
-
-> `get_games.py` and `get_game_info.py` are standalone scripts from an earlier version of the project. They rely on `pandas`, which is not listed as a dependency, and on CSS selectors that Metacritic no longer uses.
 
 ## Requirements
 
@@ -125,6 +140,16 @@ For each game the pipeline collects:
 - Platforms and genres
 - Developer and publisher
 - Whether the game is marked as **Must-Play**
+
+Not every page has all of these details. Only the name and the Must-Play flag are required. Every field typed as `| None` in `GameInfo` is stored as `NULL`:
+
+| Missing on the page | Stored as |
+|---------------------|-----------|
+| Release date, or a text like `TBA` | `game.released_date` = `NULL` |
+| Metascore or critic review counts | `NULL` columns in `critic_reviews` |
+| User score or user review counts | `NULL` columns in `users_reviews` |
+| Developer or publisher | No row in `game_companies` for that role |
+| Genres or platforms | No rows in `game_genres` / `game_platforms` |
 
 ## Notes
 
