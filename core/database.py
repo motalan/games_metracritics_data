@@ -68,6 +68,7 @@ def create_tables():
         ''')
 
     # Create the games table (game_slug is the metacritic link, e.g. /game/elden-ring/)
+    # released_date accepts NULL because GameInfo.released_date is optional (e.g. games still 'TBA')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS game (
             game_id SERIAL PRIMARY KEY,
@@ -80,6 +81,7 @@ def create_tables():
     )
 
     # Create the critic reviews table (one snapshot per game per scrape run)
+    # Score and counts accept NULL because games without critic reviews have no metascore
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS critic_reviews (
             review_id SERIAL PRIMARY KEY,
@@ -96,6 +98,7 @@ def create_tables():
     ''')
 
     # Create the users reviews table (one snapshot per game per scrape run)
+    # Score and counts accept NULL because games without user reviews have no user score
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users_reviews (
             review_id SERIAL PRIMARY KEY,
@@ -251,6 +254,9 @@ def upsert_game(connection, game: GameInfo, game_slug: str, run_id: int) -> int:
         ''', (game_id, genre_id))
 
     for bond_type, company in [('developer', game.developer), ('publisher', game.publisher)]:
+        # A game page without developer or publisher simply has no link in game_companies
+        if company is None:
+            continue
         company_id = get_or_create(connection, 'company', company)
         cursor.execute('''
             INSERT INTO game_companies (game_id, company_id, bond_type) VALUES (%s, %s, %s)

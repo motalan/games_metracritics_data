@@ -42,22 +42,31 @@ def get_game_info(text_page: str) -> list:
     # The publisher section uses the same list item class, so only the platforms section is read
     platforms_section = product_details_section(soup, 'Platforms:')
     platforms = [item.text.strip() for item in platforms_section.find_all('li', class_='c-product-details__section__list-item')] if platforms_section else []
-    genres = soup.find_all('span', class_='global-link-button__label')[-2].text.strip()
 
-    # Additional information about the game handling cases where certain elements may not be present
+    # Additional information about the game handling cases where certain elements may not be present (None when missing)
+    try:
+        genres = soup.find_all('span', class_='global-link-button__label')[-2].text.strip()
+    except (AttributeError, IndexError):
+        genres = None
     try:
         released_date = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[1].find_all('span')[-1].text
-    except:
+    except (AttributeError, IndexError):
         released_date = None
     try:
         developer = soup.find('a', class_='text-gray-800 underline').text.strip()
-    except:
-        developer = soup.find_all('div', class_='flex flex-col items-stretch gap-2 pt-8 max-lg:pt-0')[0].find_all('span')[-1].text
+    except AttributeError:
+        try:
+            developer = soup.find_all('div', class_='flex flex-col items-stretch gap-2 pt-8 max-lg:pt-0')[0].find_all('span')[-1].text.strip()
+        except (AttributeError, IndexError):
+            developer = None
     try:
-       publisher = soup.find_all('a', class_='c-product-detail-link')[-1].text.strip()
-    except:
-        publisher = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[-1].find_all('span')[-1].text
-    
+        publisher = soup.find_all('a', class_='c-product-detail-link')[-1].text.strip()
+    except IndexError:
+        try:
+            publisher = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[-1].find_all('span')[-1].text.strip()
+        except (AttributeError, IndexError):
+            publisher = None
+
     try:
         metascore_review = soup.find('div', class_='flex flex-col items-center gap-1 self-start').text
         positive_critic = soup.find('div', class_='reviews-stats__positive-stats').find_all('span')[-1].text.split(' ')[0]

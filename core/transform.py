@@ -1,5 +1,10 @@
 from pydantic import BaseModel
 from datetime import date, datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Fields typed as `| None` are optional on Metacritic pages, so their database columns must accept NULL
 
 class GameInfo(BaseModel):
     game_name: str
@@ -7,8 +12,8 @@ class GameInfo(BaseModel):
     metascore_review: int | None
     user_review: int | None
     platforms: list[str]
-    developer: str
-    publisher: str
+    developer: str | None
+    publisher: str | None
     genres: list[str]
     critic_positive: int | None
     critic_mixed: int | None
@@ -38,7 +43,9 @@ def date_transform(data: dict) -> dict:
             converted_date = datetime.strptime(data['released_date'].strip(), '%b %d, %Y').date()
             data['released_date'] = converted_date
         except ValueError:
-            raise ValueError("Invalid date format. Please use the format 'Mon DD, YYYY'.")
+            # Games without a defined release date show texts like 'TBA', which are stored as NULL
+            logger.warning(f"Unrecognized release date {data['released_date']!r}, saving it as None.")
+            data['released_date'] = None
 
     return data
 
@@ -54,10 +61,12 @@ def number_transform_int(data: dict) -> dict:
 
     return data
 
-# Convert string to list of genres, handling None values
+# Convert string to list of genres, handling None values (a game without genres gets an empty list)
 def genre_transform(data: dict) -> dict:
     if data['genres'] is not None:
         data['genres'] = [genre.replace("-", " ") for genre in data['genres'].split(' ')]
+    else:
+        data['genres'] = []
     return data
 
 def data_normalization(data: dict) -> GameInfo:
