@@ -113,6 +113,17 @@ def get_game_info(text_page: str) -> dict:
 
     developer = developer_name(soup)
 
+    # These fields only exist in the JSON-LD (None when the page does not have them)
+    description = ld.get('description')
+    content_rating = ld.get('contentRating')
+
+    # The image is normally a URL, but it could also be a list or an object with the url
+    image = ld.get('image')
+    if isinstance(image, list):
+        image = image[0] if image else None
+    if isinstance(image, dict):
+        image = image.get('url')
+
     metascore_review, positive_critic, mixed_critic, negative_critic = score_section(soup, 'critic-reviews')
     user_review, positive_user, mixed_user, negative_user = score_section(soup, 'user-reviews')
 
@@ -134,7 +145,10 @@ def get_game_info(text_page: str) -> dict:
             'users_positive': positive_user,
             'users_mixed': mixed_user,
             'users_negative': negative_user,
-            'must_play': must_play
+            'must_play': must_play,
+            'description': description,
+            'content_rating': content_rating,
+            'image_url': image
             }
 
     return data
