@@ -12,3 +12,5 @@ wheels/
 
 # Other files
 data/
+# macOS
+.DS_Store
