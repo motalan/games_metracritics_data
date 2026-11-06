@@ -34,18 +34,25 @@ int_keys = [
     'users_negative'
     ]
 
-# Validator function to ensure the date is in the correct format
+# Date formats found on game pages: ISO from the JSON-LD (1998-12-21) and the text shown in the details (Dec 21, 1998)
+DATE_FORMATS = ['%Y-%m-%d', '%b %d, %Y']
+
+# Convert the release date to a date, saving None when it is missing or not a date
 def date_transform(data: dict) -> dict:
 
     if data['released_date'] is not None:
+        text = data['released_date'].strip()
+        data['released_date'] = None
 
-        try:
-            converted_date = datetime.strptime(data['released_date'].strip(), '%b %d, %Y').date()
-            data['released_date'] = converted_date
-        except ValueError:
+        for date_format in DATE_FORMATS:
+            try:
+                data['released_date'] = datetime.strptime(text, date_format).date()
+                break
+            except ValueError:
+                continue
+        else:
             # Games without a defined release date show texts like 'TBA', which are stored as NULL
-            logger.warning(f"Unrecognized release date {data['released_date']!r}, saving it as None.")
-            data['released_date'] = None
+            logger.warning(f"Unrecognized release date {text!r}, saving it as None.")
 
     return data
 
@@ -54,10 +61,16 @@ def number_transform_int(data: dict) -> dict:
 
     for key in int_keys:
         if data.get(key) is not None:
+            value = str(data[key]).strip()
             try:
-                data[key] = int(data[key].replace('.', '').strip())  # Remove periods and whitespace before converting to int
+                if key == 'user_review':
+                    # The user score goes from 0 to 10 with one decimal and is stored multiplied by 10 (8.8 -> 88, 10 -> 100)
+                    data[key] = round(float(value) * 10)
+                else:
+                    # Counts use thousands separators (1,109 -> 1109)
+                    data[key] = int(value.replace(',', '').replace('.', ''))
             except ValueError:
-                raise ValueError(f"Invalid number format for {key}. Please ensure it's a valid integer.")
+                raise ValueError(f"Invalid number format for {key}: {value!r}.")
 
     return data
 
