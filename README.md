@@ -108,7 +108,7 @@ Logs are written to the console and to `data/logs/pipeline_<YYYYMMDD_HHMMSS>.log
 | Table / View            | Description |
 |-------------------------|-------------|
 | `scrape_run`            | One row per execution: start/finish time, status, years, S3 prefix and number of games scraped |
-| `game`                  | One row per game, identified by its Metacritic slug (`/game/elden-ring/`), with name, release date and the run in which it was first seen |
+| `game`                  | One row per game, identified by its Metacritic slug (`/game/elden-ring/`), with name, release date, description, age rating (`content_rating`, e.g. `T`), image link (`image_url`) and the run in which it was first seen |
 | `platform`              | Platform names |
 | `genre`                 | Genre names |
 | `company`               | Company names |
@@ -135,6 +135,7 @@ LIMIT 10;
 For each game the pipeline collects:
 
 - Name and release date
+- Description, age rating (ESRB) and the link to the game image (the image itself is not downloaded)
 - Metascore and user score
 - Number of positive, mixed and negative reviews (critics and users)
 - Platforms and genres
@@ -150,11 +151,12 @@ Not every page has all of these details. Only the name and the Must-Play flag ar
 | User score or user review counts | `NULL` columns in `users_reviews` |
 | Developer or publisher | No row in `game_companies` for that role |
 | Genres or platforms | No rows in `game_genres` / `game_platforms` |
+| Description, age rating or image | `NULL` columns in `game` |
 
 ## Notes
 
 - The parser reads the game page in this order ([core/parser.py](core/parser.py)):
-  - the schema.org `VideoGame` JSON-LD embedded in the page: name, release date, platforms, genres, first publisher and metascore;
+  - the schema.org `VideoGame` JSON-LD embedded in the page: name, release date, platforms, genres, first publisher, metascore, description, age rating and image link;
   - the `data-testid` attributes: developer, critic and user scores, review counts and the Must-Play badge;
   - the `game-details` section, as a fallback for the JSON-LD fields.
 
