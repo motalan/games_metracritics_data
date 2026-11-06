@@ -22,6 +22,9 @@ class GameInfo(BaseModel):
     users_mixed: int | None
     users_negative: int | None
     must_play: bool
+    description: str | None
+    content_rating: str | None
+    image_url: str | None
 
 int_keys = [
     'metascore_review',
@@ -79,8 +82,16 @@ def genre_transform(data: dict) -> dict:
     data['genres'] = [genre.strip() for genre in data.get('genres') or [] if genre and genre.strip()]
     return data
 
+# Trim the free text fields and save None when they are empty (the description is not changed beyond that)
+def text_transform(data: dict) -> dict:
+    for key in ['description', 'content_rating', 'image_url']:
+        value = data.get(key)
+        data[key] = value.strip() or None if isinstance(value, str) else None
+    return data
+
 def data_normalization(data: dict) -> GameInfo:
     data = date_transform(data)
     data = number_transform_int(data)
     data = genre_transform(data)
+    data = text_transform(data)
     return GameInfo(**data)

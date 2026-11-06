@@ -68,17 +68,24 @@ def create_tables():
         ''')
 
     # Create the games table (game_slug is the metacritic link, e.g. /game/elden-ring/)
-    # released_date accepts NULL because GameInfo.released_date is optional (e.g. games still 'TBA')
+    # released_date, description, content_rating and image_url accept NULL because they are optional in GameInfo
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS game (
             game_id SERIAL PRIMARY KEY,
             game_slug VARCHAR(255) NOT NULL UNIQUE,
             game_name VARCHAR(255) NOT NULL,
             released_date DATE,
-            first_seen_run_id INT REFERENCES scrape_run (run_id)
+            first_seen_run_id INT REFERENCES scrape_run (run_id),
+            description TEXT,
+            content_rating VARCHAR(10),
+            image_url TEXT
     );
     '''
     )
+
+    # CREATE TABLE IF NOT EXISTS does not add columns to an existing table, so databases created before them are migrated here
+    for column, column_type in [('description', 'TEXT'), ('content_rating', 'VARCHAR(10)'), ('image_url', 'TEXT')]:
+        cursor.execute(f'ALTER TABLE game ADD COLUMN IF NOT EXISTS {column} {column_type};')
 
     # Create the critic reviews table (one snapshot per game per scrape run)
     # Score and counts accept NULL because games without critic reviews have no metascore
@@ -229,12 +236,13 @@ def upsert_game(connection, game: GameInfo, game_slug: str, run_id: int) -> int:
     cursor = connection.cursor()
 
     cursor.execute('''
-        INSERT INTO game (game_slug, game_name, released_date, first_seen_run_id)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO game (game_slug, game_name, released_date, first_seen_run_id, description, content_rating, image_url)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (game_slug) DO UPDATE
-        SET game_name = EXCLUDED.game_name, released_date = EXCLUDED.released_date
+        SET game_name = EXCLUDED.game_name, released_date = EXCLUDED.released_date,
+            description = EXCLUDED.description, content_rating = EXCLUDED.content_rating, image_url = EXCLUDED.image_url
         RETURNING game_id;
-    ''', (game_slug, game.game_name, game.released_date, run_id))
+    ''', (game_slug, game.game_name, game.released_date, run_id, game.description, game.content_rating, game.image_url))
     game_id = cursor.fetchone()[0]
 
     for platform in game.platforms:
