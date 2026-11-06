@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from core.extract import collect_game_list, collect_game_page
 from core.parser import get_game_info
 from core.transform import data_normalization
-from core.bucket_import import upload_files_to_s3
+from core.bucket_import import list_files, read_file, run_prefix
 from core.database import create_connection, create_tables, start_run, finish_run, upsert_game, save_snapshot
 
 load_dotenv()
@@ -43,23 +43,17 @@ def stage(name: str):
     yield
     logger.info(f"[{name}] finished in {time.perf_counter() - start:.1f}s")
 
-def count_html(dir_path: str) -> int:
-    return len([file_name for file_name in os.listdir(dir_path) if file_name.endswith('.html')])
-
-# Parse every game page of the run and save it in the database, returning how many games were saved
-def load_games(connection, run_id: int, dir_pages: str) -> int:
+# Read every game page of the run from the bucket and save it in the database, returning how many games were saved
+def load_games(connection, run_id: int, prefix: str) -> int:
     saved = 0
     failed = 0
 
-    files = sorted(file_name for file_name in os.listdir(dir_pages) if file_name.endswith('.html'))
-
-    for file_name in tqdm(files, desc="Loading games"):
-        # Game pages are saved by slug (elden-ring.html -> /game/elden-ring/)
-        game_slug = f'/game/{file_name.removesuffix(".html")}/'
+    for key in tqdm(list_files(f'{prefix}game_pages/'), desc="Loading games"):
+        # Game pages are saved by slug (.../game_pages/elden-ring.html -> /game/elden-ring/)
+        game_slug = f'/game/{key.rsplit("/", 1)[-1].removesuffix(".html")}/'
 
         try:
-            with open(os.path.join(dir_pages, file_name), 'r', encoding='utf-8') as file:
-                game = data_normalization(get_game_info(file.read()))
+            game = data_normalization(get_game_info(read_file(key)))
 
             game_id = upsert_game(connection, game, game_slug, run_id)
             save_snapshot(connection, run_id, game_id, game)
@@ -70,42 +64,35 @@ def load_games(connection, run_id: int, dir_pages: str) -> int:
             # A page with an unexpected layout must not stop the whole run
             connection.rollback()
             failed += 1
-            logger.exception(f"Failed to load {file_name}.")
+            logger.exception(f"Failed to load {key}.")
 
     logger.info(f"{saved} games saved, {failed} failed.")
 
     return saved
 
 # Run the full pipeline for a single year as its own scrape run, returning its status and how many games were saved
-def run_year(connection, year: int) -> tuple[str, int]:
+def run_year(connection, year: int, run_date: date) -> tuple[str, int]:
     run_start = time.perf_counter()
 
-    run_id = start_run(connection, [year])
-    logger.info(f"Scrape run {run_id} started for year {year}.")
-
-    # Each run keeps its own HTML so old pages are not uploaded or saved again
-    dir_list = f'data/runs/{run_id}/game_list'
-    dir_pages = f'data/runs/{run_id}/game_pages'
-    os.makedirs(dir_list, exist_ok=True)
-    os.makedirs(dir_pages, exist_ok=True)
+    # The HTML is stored in the bucket by execution date and release year (a second run on the same day overwrites it)
+    prefix = run_prefix(run_date, year)
+    run_id = start_run(connection, [year], prefix)
+    logger.info(f"Scrape run {run_id} started for year {year}, pages stored in {prefix}.")
 
     status = 'failed'
     games_scraped = 0
 
     try:
         with stage('collect_game_list'):
-            collect_game_list([year], dir_list)
-        logger.info(f"{count_html(dir_list)} list pages saved in {dir_list}.")
+            list_pages = collect_game_list(year, prefix)
+        logger.info(f"{list_pages} list pages saved in {prefix}game_list/.")
 
         with stage('collect_game_page'):
-            collect_game_page(dir_pages, dir_list)
-        logger.info(f"{count_html(dir_pages)} game pages saved in {dir_pages}.")
-
-        with stage('upload_files_to_s3'):
-            upload_files_to_s3(dir_pages, run_id)
+            game_pages = collect_game_page(prefix)
+        logger.info(f"{game_pages} game pages saved in {prefix}game_pages/.")
 
         with stage('load_games'):
-            games_scraped = load_games(connection, run_id, dir_pages)
+            games_scraped = load_games(connection, run_id, prefix)
 
         status = 'success'
 
@@ -124,6 +111,8 @@ def main():
     args = parse_args()
     log_file = setup_logging(args.log_level)
     pipeline_start = time.perf_counter()
+    # Computed once so every year of this execution shares the same date in the bucket
+    run_date = date.today()
 
     connection = create_connection()
     if connection is None:
@@ -140,7 +129,7 @@ def main():
     try:
         for year in args.years:
             with stage(f'year {year}'):
-                results[year] = run_year(connection, year)
+                results[year] = run_year(connection, year, run_date)
     finally:
         connection.close()
 

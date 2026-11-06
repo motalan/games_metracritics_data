@@ -52,19 +52,3 @@ def list_files(prefix: str, suffix: str = '.html') -> list[str]:
 def read_file(key: str) -> str:
     response = get_s3_client().get_object(Bucket=BUCKET, Key=key)
     return response['Body'].read().decode('utf-8')
-
-def upload_files_to_s3(path_origin: str, run_id: int):
-    s3 = get_s3_client()
-    uploaded = 0
-
-    # Iterate through files in the specified directory
-    for file_name in os.listdir(path_origin):
-        if file_name.endswith('.html'):
-            # Upload each HTML file to the S3 bucket, under the prefix of its scrape run
-            s3.upload_file(f'{path_origin}/{file_name}', BUCKET, f'runs/{run_id}/game_pages/{file_name}')
-            logger.debug(f"Uploaded {file_name} to S3 bucket {BUCKET}.")
-            uploaded += 1
-
-    logger.info(f"Uploaded {uploaded} files to s3://{BUCKET}/runs/{run_id}/game_pages/.")
-
-    return uploaded

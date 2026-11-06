@@ -1,11 +1,11 @@
 import requests
 import time
-import os
 import logging
 from tqdm import tqdm
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup
 from core.parser import get_games
+from core.bucket_import import upload_content, list_files, read_file
 
 logger = logging.getLogger(__name__)
 
@@ -52,50 +52,40 @@ def last_page(url:str) -> int:
 
     return int(last_page_number)
 
-def collect_game_list(years: list, dir_path: str = 'data/game_list') -> str:
-    for y in years:
-            year_url = f'https://www.metacritic.com/browse/game/all/all/{y}/metascore/?page='
-            last_page_number = last_page(year_url) + 1
-    
-            for page in tqdm(range(1, last_page_number), desc="Fetching pages"):
-                page_url = f'{year_url}{page}'
-                page_content = fetch_page(page_url)
-    
-                if os.path.exists(dir_path):
-                    with open(f'{dir_path}/y_{y}_pg_{page}.html', 'w', encoding='utf-8') as file:
-                        file.write(page_content)
-                else:
-                    os.makedirs(dir_path, exist_ok=True)
-                    with open(f'{dir_path}/y_{y}_pg_{page}.html', 'w', encoding='utf-8') as file:
-                        file.write(page_content)
+# Download every list page of a release year and save it in the bucket, returning how many pages were saved
+def collect_game_list(year: int, prefix: str) -> int:
+    year_url = f'https://www.metacritic.com/browse/game/all/all/{year}/metascore/?page='
+    last_page_number = last_page(year_url) + 1
+    saved = 0
 
-def collect_game_page(dir_path: str = 'data/game_pages', dir_origin: str = 'data/game_list') -> str:
+    for page in tqdm(range(1, last_page_number), desc="Fetching pages"):
+        page_content = fetch_page(f'{year_url}{page}')
+        if page_content is None:
+            logger.error(f"Skipping list page {page} of {year}: page could not be fetched.")
+            continue
+
+        upload_content(f'{prefix}game_list/y_{year}_pg_{page}.html', page_content)
+        saved += 1
+
+    return saved
+
+# Read the list pages from the bucket, download each game page and save it in the bucket, returning how many pages were saved
+def collect_game_page(prefix: str) -> int:
     base_url = 'https://www.metacritic.com'
+    saved = 0
 
-    if os.path.exists(dir_origin):
-        pass
-    else:
-        os.makedirs(dir_origin, exist_ok=True)
-    
-    
-    for file_name in os.listdir(dir_origin):
-        if file_name.endswith('.html'):
-            with open(os.path.join(dir_origin,file_name), 'r', encoding='utf-8') as file:
-                page_content = file.read()
-                games, links = get_games(page_content)
+    for list_key in list_files(f'{prefix}game_list/'):
+        games, links = get_games(read_file(list_key))
 
-        for link in tqdm(range(len(links)), desc="Fetching game pages"):
-                page_content = fetch_page(base_url + links[link])
-                if page_content is None:
-                    logger.error(f"Skipping {games[link]}: page could not be fetched.")
-                    continue
+        for game, link in tqdm(list(zip(games, links)), desc="Fetching game pages"):
+            page_content = fetch_page(base_url + link)
+            if page_content is None:
+                logger.error(f"Skipping {game}: page could not be fetched.")
+                continue
 
-                # Save the page by its slug to keep the link to the game
-                slug = links[link].strip('/').split('/')[-1]
-                if os.path.exists(dir_path):
-                    with open(f'{dir_path}/{slug}.html', 'w', encoding='utf-8') as file:
-                        file.write(page_content)
-                else:
-                    os.makedirs(dir_path, exist_ok=True)
-                    with open(f'{dir_path}/{slug}.html', 'w', encoding='utf-8') as file:
-                        file.write(page_content)
+            # Save the page by its slug to keep the link to the game
+            slug = link.strip('/').split('/')[-1]
+            upload_content(f'{prefix}game_pages/{slug}.html', page_content)
+            saved += 1
+
+    return saved

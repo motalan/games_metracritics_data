@@ -182,14 +182,12 @@ def insert_data(table_name: str, data: dict):
     return inserted_row  # Return the inserted row
 
 # Register a new scrape run and return its id
-def start_run(connection, years: list) -> int:
+# s3_prefix is where the raw HTML of the run is stored in the bucket (e.g. runs/2026-11-05/2024/)
+def start_run(connection, years: list, s3_prefix: str) -> int:
     cursor = connection.cursor()
 
-    cursor.execute("INSERT INTO scrape_run (years) VALUES (%s) RETURNING run_id;", (years,))
+    cursor.execute("INSERT INTO scrape_run (years, s3_prefix) VALUES (%s, %s) RETURNING run_id;", (years, s3_prefix))
     run_id = cursor.fetchone()[0]
-
-    # Raw HTML of this run is stored under its own prefix in the S3 bucket
-    cursor.execute("UPDATE scrape_run SET s3_prefix = %s WHERE run_id = %s;", (f'runs/{run_id}/', run_id))
 
     connection.commit()
     cursor.close()
