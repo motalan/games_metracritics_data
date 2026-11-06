@@ -1,3 +1,5 @@
+import json
+import re
 from bs4 import BeautifulSoup
 
 # Souping function to parse HTML content
@@ -25,84 +27,107 @@ def get_games(text_page: str) -> list:
 
     return games, link_games
 
-# Find a product details section by its label (e.g. 'Platforms:')
-def product_details_section(soup: BeautifulSoup, label: str):
-    for section in soup.find_all('div', class_='c-product-details__section'):
-        section_label = section.find('span', class_='c-product-details__section__label')
-        if section_label is not None and section_label.text.strip() == label:
-            return section
+# Read the schema.org VideoGame object that the game page embeds as JSON-LD ({} when it is missing or invalid)
+def json_ld(soup: BeautifulSoup) -> dict:
+    for script in soup.find_all('script', type='application/ld+json'):
+        try:
+            data = json.loads(script.string or '')
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and data.get('@type') == 'VideoGame':
+            return data
+    return {}
+
+# Read the values of a block in the game details section by its label (e.g. 'Platforms:')
+def detail_values(soup: BeautifulSoup, label: str) -> list[str]:
+    details = soup.find(attrs={'data-testid': 'game-details'})
+    if details is None:
+        return []
+
+    for span in details.find_all('span'):
+        if span.get_text(strip=True) == label:
+            block = span.parent
+            values = [item.get_text(strip=True) for item in block.find_all('li')]
+            values += [item.get_text(strip=True) for item in block.find_all('span', class_='c-product-details__section__value')]
+            return [value for value in values if value]
+    return []
+
+# Read the score and the positive, mixed and negative counts of the critic-reviews or user-reviews section
+def score_section(soup: BeautifulSoup, testid: str) -> tuple:
+    section = soup.find(attrs={'data-testid': testid})
+    if section is None:
+        return None, None, None, None
+
+    # The score is 'tbd' while there are not enough reviews
+    score_tag = section.find(attrs={'data-testid': 'global-score-value'})
+    score = score_tag.get_text(strip=True) if score_tag else None
+    if score is None or not re.fullmatch(r'\d+(\.\d+)?', score):
+        score = None
+
+    # Counts are shown as '88% Positive | 976 Ratings' (or 'Reviews' for critics)
+    text = section.get_text(' | ', strip=True)
+    counts = []
+    for sentiment in ['Positive', 'Mixed', 'Negative']:
+        match = re.search(rf'{sentiment} \| ([\d,]+) (?:Reviews?|Ratings?)', text)
+        counts.append(match.group(1) if match else None)
+
+    return score, *counts
+
+# Read the developer shown below the game summary (a link or plain text after the 'Developer:' label)
+def developer_name(soup: BeautifulSoup) -> str | None:
+    block = soup.find(attrs={'data-testid': 'hero-summary-developer'})
+    if block is None:
+        return None
+
+    for tag in block.find_all(['a', 'span']):
+        name = tag.get_text(strip=True)
+        if name and name != 'Developer:':
+            return name
     return None
 
 # Function to extract detailed information about a specific game from the HTML content
-def get_game_info(text_page: str) -> list:
+# The JSON-LD is the main source because it does not depend on CSS classes, and the details section is the fallback
+def get_game_info(text_page: str) -> dict:
     soup = souping(text_page)
+    ld = json_ld(soup)
 
-    # Basic information about the game that is available for all game's page
-    game_name = soup.find('h1').text    
-    # The publisher section uses the same list item class, so only the platforms section is read
-    platforms_section = product_details_section(soup, 'Platforms:')
-    platforms = [item.text.strip() for item in platforms_section.find_all('li', class_='c-product-details__section__list-item')] if platforms_section else []
+    title = soup.find('h1')
+    game_name = ld.get('name') or (title.get_text(strip=True) if title else None)
 
-    # Additional information about the game handling cases where certain elements may not be present (None when missing)
-    try:
-        genres = soup.find_all('span', class_='global-link-button__label')[-2].text.strip()
-    except (AttributeError, IndexError):
-        genres = None
-    try:
-        released_date = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[1].find_all('span')[-1].text
-    except (AttributeError, IndexError):
-        released_date = None
-    try:
-        developer = soup.find('a', class_='text-gray-800 underline').text.strip()
-    except AttributeError:
-        try:
-            developer = soup.find_all('div', class_='flex flex-col items-stretch gap-2 pt-8 max-lg:pt-0')[0].find_all('span')[-1].text.strip()
-        except (AttributeError, IndexError):
-            developer = None
-    try:
-        publisher = soup.find_all('a', class_='c-product-detail-link')[-1].text.strip()
-    except IndexError:
-        try:
-            publisher = soup.find_all('div', class_='c-product-details__section c-product-details__section--grouped')[-1].find_all('span')[-1].text.strip()
-        except (AttributeError, IndexError):
-            publisher = None
+    released_date = ld.get('datePublished') or next(iter(detail_values(soup, 'Initial Release Date:')), None)
 
-    try:
-        metascore_review = soup.find('div', class_='flex flex-col items-center gap-1 self-start').text
-        positive_critic = soup.find('div', class_='reviews-stats__positive-stats').find_all('span')[-1].text.split(' ')[0]
-        mixed_critic = soup.find('div', class_='reviews-stats__neutral-stats').find_all('span')[-1].text.split(' ')[0]
-        negative_critic = soup.find('div', class_='reviews-stats__negative-stats').find_all('span')[-1].text.split(' ')[0]
-    except:
-        positive_critic = None
-        mixed_critic = None
-        negative_critic = None
-        metascore_review = None
-    try:
-        user_review = soup.find_all('div', class_='flex flex-col items-center gap-1 self-start')[1].find('span').text
-        positive_user = soup.find_all('div', class_='reviews-stats__positive-stats')[1].find_all('span')[-1].text.split(' ')[0]
-        mixed_user = soup.find_all('div', class_='reviews-stats__neutral-stats')[1].find_all('span')[-1].text.split(' ')[0]
-        negative_user = soup.find_all('div', class_='reviews-stats__negative-stats')[1].find_all('span')[-1].text.split(' ')[0]
-    except:
-        positive_user = None
-        mixed_user = None
-        negative_user = None
-        user_review = None
+    platforms = ld.get('gamePlatform') or detail_values(soup, 'Platforms:')
+    if isinstance(platforms, str):
+        platforms = [platforms]
 
-    # Must play is a boolean value that indicates whether the game is considered a "must play" title based on the presence of a specific HTML element
-    if soup.find('div', class_='size-12 md:size-13 shrink-0') is not None:
-        must_play = 1
-    else:
-        must_play = 0
+    genres = ld.get('genre') or detail_values(soup, 'Genres:')
+    if isinstance(genres, str):
+        genres = [genres]
 
-    # Create a dictionary to store the extracted game information
+    # Only the first publisher is kept
+    publishers = ld.get('publisher') or []
+    if isinstance(publishers, dict):
+        publishers = [publishers]
+    publisher_names = [item.get('name') for item in publishers if isinstance(item, dict) and item.get('name')]
+    publisher = next(iter(publisher_names or detail_values(soup, 'Publisher:')), None)
+
+    developer = developer_name(soup)
+
+    metascore_review, positive_critic, mixed_critic, negative_critic = score_section(soup, 'critic-reviews')
+    user_review, positive_user, mixed_user, negative_user = score_section(soup, 'user-reviews')
+
+    # Must play is true when the score badge shows the must-play image
+    must_play = soup.select_one('[data-testid="global-score-badge"] img[alt="must-play"]') is not None
+
+    # Create a dictionary to store the extracted game information (None or [] when the page does not have it)
     data = {'game_name': game_name,
             'released_date': released_date,
             'metascore_review': metascore_review,
             'user_review': user_review,
-            'platforms': platforms,
+            'platforms': platforms or [],
             'developer': developer,
             'publisher': publisher,
-            'genres': genres,
+            'genres': genres or [],
             'critic_positive': positive_critic,
             'critic_mixed': mixed_critic,
             'critic_negative': negative_critic,
@@ -111,5 +136,5 @@ def get_game_info(text_page: str) -> list:
             'users_negative': negative_user,
             'must_play': must_play
             }
-    
+
     return data

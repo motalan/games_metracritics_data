@@ -74,12 +74,9 @@ def number_transform_int(data: dict) -> dict:
 
     return data
 
-# Convert string to list of genres, handling None values (a game without genres gets an empty list)
+# Clean the list of genres, handling None values (a game without genres gets an empty list)
 def genre_transform(data: dict) -> dict:
-    if data['genres'] is not None:
-        data['genres'] = [genre.replace("-", " ") for genre in data['genres'].split(' ')]
-    else:
-        data['genres'] = []
+    data['genres'] = [genre.strip() for genre in data.get('genres') or [] if genre and genre.strip()]
     return data
 
 def data_normalization(data: dict) -> GameInfo:
