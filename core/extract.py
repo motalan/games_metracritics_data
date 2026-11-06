@@ -45,8 +45,8 @@ def last_page(url:str) -> int:
     try:
         page = fetch_page(url)
         soup = BeautifulSoup(page, 'html.parser')
-        last_pages = soup.find_all('span', class_='c-navigation-pagination__item-content')
-        last_page_number = last_pages[-2].text.strip()
+        last_pages = soup.find_all('span', class_='flex items-center justify-center min-w-8 h-8 p-3 rounded-[100px] font-bold text-gray-800 group-hover/item:bg-gray-100')
+        last_page_number = last_pages[-1].text.strip()
     except:
         last_page_number = 1
 
