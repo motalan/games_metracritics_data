@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import time
+from collections import Counter
 from contextlib import contextmanager
 from datetime import date, datetime
 from tqdm import tqdm
@@ -43,10 +44,25 @@ def stage(name: str):
     yield
     logger.info(f"[{name}] finished in {time.perf_counter() - start:.1f}s")
 
+# Fields checked after loading a year: if one is empty for every game, the page layout probably changed
+TRACKED_FIELDS = ['released_date', 'metascore_review', 'user_review', 'developer', 'publisher', 'genres', 'platforms']
+
+# Log how many games are missing each tracked field, warning when a field is missing for all of them
+def log_missing_fields(missing: Counter, saved: int):
+    if saved == 0:
+        return
+
+    logger.info("Games missing each field: " + ", ".join(f"{field}={missing[field]}" for field in TRACKED_FIELDS))
+
+    for field in TRACKED_FIELDS:
+        if saved > 1 and missing[field] == saved:
+            logger.warning(f"Field '{field}' is missing for all {saved} games: the parser selector probably broke after a Metacritic layout change.")
+
 # Read every game page of the run from the bucket and save it in the database, returning how many games were saved
 def load_games(connection, run_id: int, prefix: str) -> int:
     saved = 0
     failed = 0
+    missing = Counter()
 
     for key in tqdm(list_files(f'{prefix}game_pages/'), desc="Loading games"):
         # Game pages are saved by slug (.../game_pages/elden-ring.html -> /game/elden-ring/)
@@ -58,6 +74,7 @@ def load_games(connection, run_id: int, prefix: str) -> int:
             game_id = upsert_game(connection, game, game_slug, run_id)
             save_snapshot(connection, run_id, game_id, game)
             saved += 1
+            missing.update(field for field in TRACKED_FIELDS if getattr(game, field) in (None, []))
             logger.debug(f"Saved {game_slug} (game_id={game_id}).")
 
         except Exception:
@@ -67,6 +84,7 @@ def load_games(connection, run_id: int, prefix: str) -> int:
             logger.exception(f"Failed to load {key}.")
 
     logger.info(f"{saved} games saved, {failed} failed.")
+    log_missing_fields(missing, saved)
 
     return saved
 
