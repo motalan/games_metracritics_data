@@ -45,7 +45,7 @@ def stage(name: str):
     logger.info(f"[{name}] finished in {time.perf_counter() - start:.1f}s")
 
 # Fields checked after loading a year: if one is empty for every game, the page layout probably changed
-TRACKED_FIELDS = ['released_date', 'metascore_review', 'user_review', 'developer', 'publisher', 'genres', 'platforms']
+TRACKED_FIELDS = ['released_date', 'metascore_review', 'user_review', 'developer', 'publisher', 'genres', 'platforms', 'description', 'content_rating', 'image_url']
 
 # Log how many games are missing each tracked field, warning when a field is missing for all of them
 def log_missing_fields(missing: Counter, saved: int):
